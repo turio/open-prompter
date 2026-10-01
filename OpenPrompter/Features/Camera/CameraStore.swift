@@ -533,6 +533,9 @@ final class CameraStore {
             isSessionRunning = true
             return
         }
+        _ = AudioSessionCoordinator.shared.claim(.cameraPreview, configuration: .capture)
+        // A missing pin remains visible and blocks REC; preview can still run.
+        try? PreferredAudioInput.applyPreference()
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             sessionQueue.async {
                 // Only wrap a begin/commit when we actually need to attach
@@ -606,6 +609,7 @@ final class CameraStore {
                 }
             }
         }
+        AudioSessionCoordinator.shared.release(.cameraPreview)
     }
 
     /// Build and attach the front-camera input. Must be called inside a
@@ -794,7 +798,7 @@ final class CameraStore {
     /// audio track and the chip surfaces a strikethrough-mic glyph during
     /// the take.
     nonisolated private func attachAudioInputLocked() {
-        guard let audioDevice = Self.preferredAudioDevice() ?? AVCaptureDevice.default(for: .audio) else {
+        guard let audioDevice = Self.preferredAudioDevice() else {
             return
         }
         do {
@@ -814,18 +818,16 @@ final class CameraStore {
     /// Mirrors the helper RecordingSession used to own; we hoist it here
     /// because audio attachment now lives at session-config time.
     nonisolated private static func preferredAudioDevice() -> AVCaptureDevice? {
-        let pin = Prefs.recordingMicSource ?? "builtin"
-        if pin == "auto" || pin == "builtin" {
-            return AVCaptureDevice.default(for: .audio)
+        guard let port = AVAudioSession.sharedInstance().currentRoute.inputs.first else { return nil }
+        let active = PreferredAudioInput.identity(port)
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.microphone], mediaType: .audio, position: .unspecified)
+        let identities = discovery.devices.map {
+            PreferredAudioInput.Identity(id: $0.uniqueID, name: $0.localizedName, isBuiltIn: false)
         }
-        // The pin holds a port UID. Find a matching capture device by
-        // scanning AVCaptureDevice.DiscoverySession's audio device list.
-        let session = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.microphone],
-            mediaType: .audio,
-            position: .unspecified
-        )
-        return session.devices.first { $0.uniqueID == pin } ?? AVCaptureDevice.default(for: .audio)
+        guard let resolved = PreferredAudioInput.captureDevice(active: active, devices: identities) else { return nil }
+        return discovery.devices.first { $0.uniqueID == resolved.id }
+
     }
 
     /// Probe both `.builtInWideAngleCamera` and `.builtInUltraWideCamera`

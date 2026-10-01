@@ -42,10 +42,12 @@ enum AudioSessionRole: Int, CaseIterable, Sendable {
     /// Passive `outputVolume` KVO for the volume-button remote. Lowest
     /// priority — it yields the category to any active capture consumer.
     case volumeObservation = 0
-    /// Voice-tracked auto-scroll owns the mic via AVAudioEngine.
-    case voiceTracking = 1
+    /// Capture preview holds the shared microphone path open.
+    case cameraPreview = 1
+    /// Voice tracking consumes the camera audio fork.
+    case voiceTracking = 2
     /// Active video recording owns the mic + speaker route.
-    case recording = 2
+    case recording = 3
 }
 
 /// The concrete category/mode/options a role needs when it wins. Kept as a

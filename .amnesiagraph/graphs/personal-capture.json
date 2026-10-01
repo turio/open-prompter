@@ -38,7 +38,7 @@
       "verify": [
         "xcodebuild test -quiet -scheme OpenPrompter -destination 'platform=iOS Simulator,id=70FE4A07-3B36-44B9-A9B1-01EFA3619127' -derivedDataPath /tmp/myteleprompter-build CODE_SIGNING_ALLOWED=NO -skipPackagePluginValidation -only-testing:OpenPrompterTests/PersonalAudioRouteTests"
       ],
-      "status": "active",
+      "status": "done",
       "blocker": null
     },
     {

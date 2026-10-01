@@ -114,6 +114,12 @@ struct RecordingSettingsView: View {
                 .pickerStyle(.menu)
                 .onChange(of: pinnedMic) { _, new in
                     Prefs.recordingMicSource = new
+                    PreferredAudioInput.savedName = routeMonitor.availableInputs.first { $0.id == new }?.portName
+                    Task { @MainActor in
+                        do { try PreferredAudioInput.applyPreference() }
+                        catch { /* REC surfaces the actionable missing-input error. */ }
+                        routeMonitor.refresh()
+                    }
                 }
                 Text("auto lets ios pick — it can grab whatever bluetooth headset you have nearby. built-in is safer if you keep airpods on your desk.")
                     .font(.system(size: 12))

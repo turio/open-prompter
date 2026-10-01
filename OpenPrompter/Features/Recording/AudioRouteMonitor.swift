@@ -81,6 +81,18 @@ final class AudioRouteMonitor {
     @ObservationIgnored
     private nonisolated(unsafe) var observerToken: NSObjectProtocol?
 
+    private(set) var currentRouteUID: String = ""
+    private(set) var inputChangedWarning: String?
+    private var takeInputUID: String?
+
+    func beginTake() {
+        refresh()
+        takeInputUID = currentRouteUID
+        inputChangedWarning = nil
+    }
+
+    func endTake() { takeInputUID = nil }
+
     init() {}
 
     /// Start observing route changes. Idempotent — calling twice is a no-op.
@@ -120,11 +132,19 @@ final class AudioRouteMonitor {
         let session = AVAudioSession.sharedInstance()
         let route = session.currentRoute
         if let input = route.inputs.first {
+            currentRouteUID = input.uid
             currentRouteName = input.portName
             currentRoutePortType = input.portType.rawValue
         } else {
-            currentRouteName = "Built-in microphone"
+            currentRouteUID = ""
+            currentRouteName = "No active microphone"
             currentRoutePortType = AVAudioSession.Port.builtInMic.rawValue
+        }
+        if let takeInputUID, currentRouteUID != takeInputUID {
+            inputChangedWarning = "Audio input changed: \(currentRouteName)"
+            #if DEBUG
+            print("[AudioRoute] \(inputChangedWarning!) uid=\(currentRouteUID) type=\(currentRoutePortType)")
+            #endif
         }
         let inputs = session.availableInputs ?? []
         availableInputs = inputs.map {

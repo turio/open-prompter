@@ -315,6 +315,7 @@ struct TeleprompterView: View {
             .allowsHitTesting(!vm.focus && !cameraPromoted)
             .animation(.easeInOut(duration: Theme.focusAnim), value: vm.focus)
         }
+        .modifier(CaptureStatusModifier())
         .overlay(alignment: .bottom) {
             VStack(spacing: 6) {
                 // Bottom chip strip — centralized control row per the

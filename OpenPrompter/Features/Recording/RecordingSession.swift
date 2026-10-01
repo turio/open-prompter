@@ -356,6 +356,14 @@ final class RecordingSession {
         if aspect == .wide && (!PersonalCaptureContract.is4K(width: capture.0, height: capture.1) || !capture.2 || !capture.3) {
             throw RecordingSessionError.writerSetupFailed(PersonalCaptureContract.unavailableMessage(fps: fps.fps))
         }
+        if let error = AudioSessionCoordinator.shared.claim(.recording, configuration: .capture) { throw error }
+        do {
+            try PreferredAudioInput.applyPreference()
+            try PreferredAudioInput.validateActiveRoute(captureDevice: cameraStore?.currentAudioInputDevice?.device)
+        } catch {
+            AudioSessionCoordinator.shared.release(.recording)
+            throw error
+        }
         let route = AVAudioSession.sharedInstance().currentRoute.inputs.first
         let snapshot = CapturePreflightSnapshot(
             cameraName: device.localizedName, cameraID: device.uniqueID,
@@ -434,6 +442,7 @@ final class RecordingSession {
         countdownTask?.cancel()
         countdownTask = nil
         state.cancelCountdown()
+        releaseAudioSession(role: .recording)
     }
 
     /// Stop the writer and run the save flow. No-op outside the recording
