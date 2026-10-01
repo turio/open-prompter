@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "id": "T001",
+      "order": 1,
+      "title": "Baseline build and tests",
+      "source": "docs/personal-4k-dji-implementation-plan.md#1",
+      "depends_on": [],
+      "verify": [
+        "test -f docs/baseline.md"
+      ],
+      "status": "done",
+      "blocker": null
+    },
+    {
+      "id": "T002",
+      "order": 2,
+      "title": "4K SDR 30/60 contract",
+      "source": "docs/personal-4k-dji-implementation-plan.md#3",
+      "depends_on": [
+        "T001"
+      ],
+      "verify": [
+        "xcodebuild test -quiet -scheme OpenPrompter -destination 'platform=iOS Simulator,id=70FE4A07-3B36-44B9-A9B1-01EFA3619127' -derivedDataPath /tmp/myteleprompter-build CODE_SIGNING_ALLOWED=NO -skipPackagePluginValidation -only-testing:OpenPrompterTests/PersonalCaptureTests"
+      ],
+      "status": "active",
+      "blocker": null
+    },
+    {
+      "id": "T003",
+      "order": 3,
+      "title": "Preferred and actual audio routes",
+      "source": "docs/personal-4k-dji-implementation-plan.md#5",
+      "depends_on": [
+        "T002"
+      ],
+      "verify": [
+        "xcodebuild test -quiet -scheme OpenPrompter -destination 'platform=iOS Simulator,id=70FE4A07-3B36-44B9-A9B1-01EFA3619127' -derivedDataPath /tmp/myteleprompter-build CODE_SIGNING_ALLOWED=NO -skipPackagePluginValidation -only-testing:OpenPrompterTests/PersonalAudioRouteTests"
+      ],
+      "status": "pending",
+      "blocker": null
+    },
+    {
+      "id": "T004",
+      "order": 4,
+      "title": "Shared capture audio speech backend",
+      "source": "docs/personal-4k-dji-implementation-plan.md#6",
+      "depends_on": [
+        "T003"
+      ],
+      "verify": [
+        "xcodebuild test -quiet -scheme OpenPrompter -destination 'platform=iOS Simulator,id=70FE4A07-3B36-44B9-A9B1-01EFA3619127' -derivedDataPath /tmp/myteleprompter-build CODE_SIGNING_ALLOWED=NO -skipPackagePluginValidation -only-testing:OpenPrompterTests/SharedSpeechAudioTests -only-testing:OpenPrompterTests/ScriptAlignerTests"
+      ],
+      "status": "pending",
+      "blocker": null
+    },
+    {
+      "id": "T005",
+      "order": 5,
+      "title": "Camera behind text composition",
+      "source": "docs/personal-4k-dji-implementation-plan.md#9",
+      "depends_on": [
+        "T004"
+      ],
+      "verify": [
+        "xcodebuild build -quiet -scheme OpenPrompter -destination 'platform=iOS Simulator,id=70FE4A07-3B36-44B9-A9B1-01EFA3619127' -derivedDataPath /tmp/myteleprompter-build CODE_SIGNING_ALLOWED=NO -skipPackagePluginValidation"
+      ],
+      "status": "pending",
+      "blocker": null
+    },
+    {
+      "id": "T006",
+      "order": 6,
+      "title": "Simulator validation and deployment",
+      "source": "docs/personal-4k-dji-implementation-plan.md#12",
+      "depends_on": [
+        "T005"
+      ],
+      "verify": [
+        "xcodebuild test -quiet -scheme OpenPrompter -destination 'platform=iOS Simulator,id=70FE4A07-3B36-44B9-A9B1-01EFA3619127' -derivedDataPath /tmp/myteleprompter-build CODE_SIGNING_ALLOWED=NO -skipPackagePluginValidation"
+      ],
+      "status": "pending",
+      "blocker": null
+    },
+    {
+      "id": "T007",
+      "order": 7,
+      "title": "Physical acceptance A–G",
+      "source": "docs/personal-4k-dji-implementation-plan.md#13",
+      "depends_on": [
+        "T006"
+      ],
+      "verify": [
+        "test -f docs/physical-acceptance-passed.md"
+      ],
+      "status": "pending",
+      "blocker": null
+    }
+  ]
+}
