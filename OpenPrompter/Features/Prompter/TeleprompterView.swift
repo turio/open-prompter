@@ -178,6 +178,7 @@ struct TeleprompterView: View {
         ZStack {
             // Backdrop — Prompter Black behind the scrolling text.
             Theme.bg.ignoresSafeArea()
+            behindCameraLayer
 
             // Scrolling text — full-bleed, measures its own viewport internally.
             // Mirror is applied as a pair of independent scale flips per
@@ -921,6 +922,32 @@ struct TeleprompterView: View {
         max(560, CGFloat(vm.fontSize) * 12)
     }
 
+    private var scriptTopPaddingFraction: CGFloat { cameraStyle == .behind ? 0.15 : 0.5 }
+
+    @ViewBuilder
+    private var behindCameraLayer: some View {
+        if cameraStyle == .behind {
+            CameraPreview(
+                session: appState.cameraStore.session,
+                horizontalMirror: vm.mirroredHorizontal,
+                verticalMirror: vm.mirroredVertical,
+                requestedDynamicAspectRaw: appState.cameraStore.requestedDynamicAspectRaw,
+                sessionConfigurationVersion: appState.cameraStore.sessionConfigurationVersion,
+                rotationBox: appState.cameraStore.rotationBox
+            )
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            GeometryReader { geometry in
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.black.opacity(0.45))
+                    .frame(height: min(geometry.size.height * 0.45, CGFloat(vm.fontSize) * 5.6))
+                    .padding(.horizontal, 12)
+                    .offset(y: max(80, geometry.size.height * CGFloat(voiceReadFraction)))
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
     @ViewBuilder
     private var scrollingText: some View {
         GeometryReader { geo in
@@ -928,6 +955,8 @@ struct TeleprompterView: View {
                 VStack(alignment: .center, spacing: vm.fontSize * 0.45) {
                     ForEach(Array(vm.parsed.blocks.enumerated()), id: \.offset) { idx, block in
                         blockView(for: block)
+                            .fontWeight(cameraStyle == .behind ? .semibold : nil)
+                            .shadow(color: cameraStyle == .behind ? .black.opacity(0.85) : .clear, radius: 2, y: 1)
                             // 2.0.6: publish each rendered block's
                             // frame inside the `scriptContent` named
                             // coordinate space so voice tracking can
@@ -955,7 +984,7 @@ struct TeleprompterView: View {
                 .padding(.horizontal, 24)
                 // Top padding lets the first line start roughly mid-viewport (eye-line).
                 // Bottom padding lets the last line scroll up past the middle.
-                .padding(.top, geo.size.height * 0.5)
+                .padding(.top, geo.size.height * scriptTopPaddingFraction)
                 .padding(.bottom, geo.size.height * 0.8)
                 .coordinateSpace(name: "scriptContent")
                 .onPreferenceChange(BlockFramesPreferenceKey.self) { frames in
@@ -1312,7 +1341,7 @@ struct TeleprompterView: View {
                 // Go through the same working path the chip uses: permission
                 // gate → optimistic style flip → session start. On denial the
                 // store snaps back to .off and raises the denied banner.
-                Task { await appState.cameraStore.setStyle(.pip) }
+                Task { await appState.cameraStore.setStyle(.behind) }
             } label: {
                 Text("enable camera")
                     .font(.system(size: 12, weight: .bold, design: .monospaced))
@@ -1470,7 +1499,7 @@ struct TeleprompterView: View {
     private var enableCameraButton: some View {
         Button {
             Task {
-                await appState.cameraStore.setStyle(.pip)
+                await appState.cameraStore.setStyle(.behind)
                 Haptics.tap()
             }
         } label: {
@@ -1678,7 +1707,7 @@ struct TeleprompterView: View {
         let session = appState.recordingSession
         // Snapshot visible-range so the very first match is constrained
         // to what's on screen, not the whole script.
-        let topPad = vm.viewportHeight * 0.5
+        let topPad = vm.viewportHeight * scriptTopPaddingFraction
         let bottomPad = vm.viewportHeight * 0.8
         let bodyHeight = max(0, vm.contentHeight - topPad - bottomPad)
         tracker.updateVisibleTokenRange(
@@ -1750,7 +1779,7 @@ struct TeleprompterView: View {
         // Refresh the visible-range with current geometry FIRST. The
         // aligner uses it on the next match. Without this, a font-
         // size change would race the next match with stale geometry.
-        let topPadHandle = vm.viewportHeight * 0.5
+        let topPadHandle = vm.viewportHeight * scriptTopPaddingFraction
         let bottomPadHandle = vm.viewportHeight * 0.8
         let bodyHeightHandle = max(0, vm.contentHeight - topPadHandle - bottomPadHandle)
         appState.voiceTracker.updateVisibleTokenRange(
@@ -1792,7 +1821,7 @@ struct TeleprompterView: View {
             // Linear-by-char fallback for the legacy `loadScript(_:)`
             // path (tests, mostly) — accounts for top/bottom padding
             // but doesn't know about per-block heights.
-            let topPad = vm.viewportHeight * 0.5
+            let topPad = vm.viewportHeight * scriptTopPaddingFraction
             let bottomPad = vm.viewportHeight * 0.8
             let bodyHeight = max(0, vm.contentHeight - topPad - bottomPad)
             cursorContentY = topPad + CGFloat(fraction) * bodyHeight
@@ -1864,7 +1893,7 @@ struct TeleprompterView: View {
             // Keep the aligner's visible-range constraint in sync with
             // current scroll geometry so a generic word can't match an
             // offscreen instance. Cheap O(n) walk over tokens.
-            let topPadTick = vm.viewportHeight * 0.5
+            let topPadTick = vm.viewportHeight * scriptTopPaddingFraction
             let bottomPadTick = vm.viewportHeight * 0.8
             let bodyHeightTick = max(0, vm.contentHeight - topPadTick - bottomPadTick)
             appState.voiceTracker.updateVisibleTokenRange(

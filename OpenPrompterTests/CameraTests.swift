@@ -84,9 +84,9 @@ final class CameraTests: XCTestCase {
 
     func testCameraStyleNextCycleOrder() {
         // Chip cycles off → pip → off. Behind removed; legacy fallback → off.
-        XCTAssertEqual(CameraStyle.off.nextStyle, .pip)
+        XCTAssertEqual(CameraStyle.off.nextStyle, .behind)
         XCTAssertEqual(CameraStyle.pip.nextStyle, .off)
-        XCTAssertEqual(CameraStyle.behind.nextStyle, .off)
+        XCTAssertEqual(CameraStyle.behind.nextStyle, .pip)
     }
 
     func testCameraStyleRequiresPermissionFlag() {
