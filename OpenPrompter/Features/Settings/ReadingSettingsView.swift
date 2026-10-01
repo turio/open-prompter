@@ -29,6 +29,10 @@ struct ReadingSettingsView: View {
     @State private var showReadingProgressBar: Bool = Prefs.showReadingProgressBar
     @State private var voiceFollowSpeed: Double = Prefs.voiceFollowSpeedFactor
 
+    #if DEBUG
+    @AppStorage("debug.voice.followDiagnostics") private var voiceFollowDiagnostics = false
+    #endif
+
     var body: some View {
         Form {
             Section("appearance") {
@@ -98,6 +102,12 @@ struct ReadingSettingsView: View {
             }
 
             Section("voice following") {
+                #if DEBUG
+                Toggle("show debug overlay", isOn: $voiceFollowDiagnostics)
+                Text("shows the green voice-follow diagnostics window over the script. turn off for a clear reading screen.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.dim)
+                #endif
                 HStack {
                     Text("chase speed")
                     Spacer()

@@ -13,3 +13,7 @@ On October 1, 2026, the personal fork was built with Xcode 26.4.1, signed using 
 Validation: signed Debug device build succeeded; `codesign --verify --deep --strict` passed; the built display name matched; `devicectl` confirmed installation and successful launch. Build products are in `/tmp/ai-tele-device-build/Build/Products/Debug-iphoneos/OpenPrompter.app` and the build log is `/tmp/ai-tele-device-build.log`.
 
 This confirms physical deployment and launch. The recording, DJI route, speech-follow and sustained-capture acceptance tests A–G are still unverified; deployment alone does not establish those results.
+
+## Follow-up UI changes — 2026-10-01
+
+Added a shared Reading/Labs setting to hide the green voice diagnostics overlay (default hidden). Replaced independently overlapping bottom control layers with an adaptive shared row and a separate camera row when space is tight. Source diff checks pass. Signed device rebuild and deployment remain blocked by repeated macOS disk exhaustion (`No space left on device`); these changes have not been installed on the iPhone or visually verified. Generated intermediates from this project were removed to reclaim space. Physical capture acceptance T007 remains unverified.

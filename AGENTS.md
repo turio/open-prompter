@@ -63,3 +63,7 @@ For capture changes start in `CameraStore`, `RecordingSession`, and their pure s
 The personal capture source plan is `docs/personal-4k-dji-implementation-plan.md`. Use AmnesiaGraph `amnesia resume` and follow its source pointers; use `ready`, `start`, and verified `done` transitions. Hardware acceptance results belong in implementation notes, not assertions inferred from simulator tests.
 
 If `amnesia` is unavailable, the upstream CLI installs with `go install github.com/turio/AmnesiaGraph/cmd/amnesia@latest`; ensure the Go bin directory is on PATH. This implementation used a temporary CLI at `/tmp/amnesia` without editing personal skills or configuration.
+
+## Prompter controls
+
+The DEBUG green voice-follow overlay uses the shared `debug.voice.followDiagnostics` AppStorage key in Reading settings, Labs, and TeleprompterView; its default is hidden. The bottom chip strip uses ViewThatFits to keep controls in a shared row or move camera controls to a separate row on narrow screens. Avoid independently overlaying camera controls over status chips.

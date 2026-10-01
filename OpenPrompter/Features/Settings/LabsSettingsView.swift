@@ -71,9 +71,9 @@ struct LabsSettingsView: View {
 
     /// On-prompter voice-follow diagnostics overlay. Plain UserDefaults key
     /// (not a PrefKey) — a DEBUG diagnostic surface, not a user preference.
-    /// Default ON so dogfood builds show the readout unless opted out.
+    /// Hidden by default; shares the Settings → Reading toggle.
     @AppStorage("debug.voice.followDiagnostics")
-    private var voiceFollowDiagnostics: Bool = true
+    private var voiceFollowDiagnostics: Bool = false
     #endif
 
     /// Mirrors `OrientationPolicy.wideFrontPreviewAngleOverride` so the
@@ -223,8 +223,7 @@ struct LabsSettingsView: View {
 
     /// Voice-follow diagnostics overlay toggle (DEBUG). Gates the three-line
     /// on-prompter readout (match verdict / aim path / chase state) used for
-    /// on-device diagnosis of the voice-follow pipeline. Default ON; flip off
-    /// for a clean prompter screen.
+    /// on-device diagnosis of the voice-follow pipeline. Hidden by default.
     @ViewBuilder
     private var voiceFollowDiagnosticsRow: some View {
         Toggle("voice-follow diagnostics", isOn: $voiceFollowDiagnostics)

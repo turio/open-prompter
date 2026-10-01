@@ -117,13 +117,11 @@ struct TeleprompterView: View {
     @State private var voiceDiagTick: String = "tick: —"
     @State private var lastVoiceDiagTickUpdate: Date = .distantPast
 
-    /// Master switch for the overlay. Mirrors the Settings → Labs toggle;
-    /// default ON so dogfood builds show diagnostics unless the user opts
-    /// out. Plain UserDefaults key (not a PrefKey) — a DEBUG diagnostic
+    /// Master switch shared by Settings → Reading and Labs; hidden by default. Plain UserDefaults key (not a PrefKey) — a DEBUG diagnostic
     /// surface, not a user preference (same pattern as the wide-front
     /// angle-cycler key).
     @AppStorage("debug.voice.followDiagnostics")
-    private var voiceFollowDiagnostics: Bool = true
+    private var voiceFollowDiagnostics: Bool = false
     #endif
 
     // Live-read prefs that gate which sources are active. UserDefaults-backed
@@ -1394,46 +1392,32 @@ struct TeleprompterView: View {
         return f
     }()
 
-    /// Centralized chip strip — Edit + Sync + (Camera Style) + (REC) +
-    /// (Mark) + Mirror status, left to right. Camera Style / REC / Mark are
-    /// conditional on Labs/style/record state; Edit + Sync + Mirror always
-    /// render so the strip has a stable frame.
-    ///
-    /// Layout: the active cluster (edit, sync, camera, REC, mark) is LEFT-
-    /// anchored and the mirror pill is pinned right by a single Spacer — so
-    /// nothing re-centers when Mark appears mid-take or the sync label
-    /// changes width (the "buttons move around" report). The two passive
-    /// status chips (sync, mirror) carry a negative layoutPriority so they
-    /// yield/truncate first, keeping the REC timer, Mark button, and camera
-    /// chip un-truncated on every iPhone width including SE.
-    ///
-    /// CAMERA-OFF exception (Bug 1): when the camera is off, the left-anchored
-    /// "no camera" chip is replaced by a single CENTERED "enable camera"
-    /// button (balanced Spacers either side — reflow-safe on SE, no ZStack
-    /// overlap). Tapping it turns the camera on (→ pip), which flips
-    /// `cameraStyle` so this strip re-renders into the ON layout and the
-    /// button "pops out" into the pip toggle + REC in their normal spots.
+    /// Chips share a measured row; camera controls move below status chips
+    /// when their combined intrinsic widths exceed the available space.
     @ViewBuilder
     private var bottomChipStrip: some View {
-        ZStack {
-            // Side anchors: edit + sync pinned LEFT, mirror pinned RIGHT.
-            // These stay put in every state so the row has a stable frame and
-            // the mirror never collides with the centered controls.
+        ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
                 editChip
                 syncChip
-                    .layoutPriority(-1)
-                Spacer(minLength: 8)
+                centeredCameraControls
                 mirrorStatusPill
-                    .layoutPriority(-1)
             }
-            // Camera controls CENTERED on the full row — dead over the
-            // Play|Voice split directly below — consistently whether the
-            // camera is off (a single "enable camera" button) or on (the pip
-            // toggle + REC + mid-take Mark cluster). Centering BOTH states was
-            // the dogfood ask: the ON cluster used to be left-anchored, which
-            // left a weird gap on the right.
-            centeredCameraControls
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(maxWidth: .infinity)
+
+            VStack(spacing: 6) {
+                HStack(spacing: 8) {
+                    editChip
+                    syncChip
+                        .lineLimit(1)
+                        .layoutPriority(-1)
+                    Spacer(minLength: 8)
+                    mirrorStatusPill
+                }
+                centeredCameraControls
+                    .frame(maxWidth: .infinity)
+            }
         }
         .padding(.horizontal, 10)
         .animation(.easeInOut(duration: 0.18), value: cameraStyle)
