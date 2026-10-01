@@ -19,6 +19,8 @@ enum RecordingFramerate: String, CaseIterable, Codable, Hashable, Sendable {
 
     static var `default`: RecordingFramerate { .fps30 }
 
+    static let surfacedCases: [RecordingFramerate] = [.fps30, .fps60]
+
     /// Numeric frames-per-second. Used to set the capture device's
     /// `activeVideoMinFrameDuration` / `activeVideoMaxFrameDuration` and to
     /// label the picker.

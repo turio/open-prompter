@@ -680,6 +680,11 @@ final class CameraStore {
         do {
             try device.lockForConfiguration()
             device.activeFormat = choice.format
+            device.automaticallyAdjustsVideoHDREnabled = false
+            device.isVideoHDREnabled = false
+            if choice.format.supportedColorSpaces.contains(.sRGB) {
+                device.activeColorSpace = .sRGB
+            }
 
             // iOS 26+ dynamic aspect — reshape the buffer to 1×1 (or first
             // declared aspect) when the format supports it. On iPhone 17
@@ -900,7 +905,7 @@ final class CameraStore {
         let summaries: [(format: AVCaptureDevice.Format, descriptor: FormatDescriptor)] = formats.map { format in
             Self.summarize(format)
         }
-        guard let pick = pickOpenGateFormat(
+        guard let pick = pickCaptureFormat(
             descriptors: summaries.map { $0.descriptor },
             preferredFPS: preferredFPS,
             userAspect: userAspect
@@ -1035,6 +1040,25 @@ final class CameraStore {
     /// the iOS 26 enum's availability. If you ever add a new aspect, ensure
     /// the raw string you use here matches the `AVCaptureDevice.AspectRatio`
     /// rawValue exactly — a typo silently demotes the user to Step 3.
+    /// Personal wide mode excludes formats that cannot deliver 4K before
+    /// applying the existing dynamic-aspect priority. Other shapes retain
+    /// the upstream selector unchanged.
+    nonisolated static func pickCaptureFormat(
+        descriptors: [FormatDescriptor],
+        preferredFPS: Double,
+        userAspect: RecordingAspect
+    ) -> (index: Int, dynamicAspectRaw: String?)? {
+        guard userAspect.canonicalShape == .wide else {
+            return pickOpenGateFormat(descriptors: descriptors, preferredFPS: preferredFPS, userAspect: userAspect)
+        }
+        let eligible = descriptors.enumerated().filter {
+            PersonalCaptureContract.is4K(width: $0.element.width, height: $0.element.height)
+        }
+        guard let pick = pickOpenGateFormat(descriptors: eligible.map { $0.element },
+                                            preferredFPS: preferredFPS, userAspect: userAspect) else { return nil }
+        return (eligible[pick.index].offset, pick.dynamicAspectRaw)
+    }
+
     nonisolated static func pickOpenGateFormat(
         descriptors: [FormatDescriptor],
         preferredFPS: Double,

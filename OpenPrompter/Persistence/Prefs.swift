@@ -291,7 +291,7 @@ enum PrefKey: String, CaseIterable {
         // Existing users with a recording history are ALSO pinned to "openGate"
         // by `migrateRecordingAspectToOpenGate(in:domain:)` BEFORE registration
         // happens — same value, so new and existing installs now converge.
-        case .recordingAspect: return "openGate"
+        case .recordingAspect: return "ratio16x9"
         case .coachMarkRecordingAspectShown: return false
         // Video markers (V3 headline). BOTH output shapes on by default —
         // the feature is the founder's explicit ask and both an NLE marker
@@ -721,7 +721,7 @@ enum Prefs {
     /// Settings reads through this as a `RecordingAspect` enum
     /// (`.canonicalShape` collapses a stray legacy value). V3 §07.
     static var recordingAspect: String {
-        get { defaults.string(forKey: PrefKey.recordingAspect.rawValue) ?? "openGate" }
+        get { defaults.string(forKey: PrefKey.recordingAspect.rawValue) ?? "ratio16x9" }
         set { defaults.set(newValue, forKey: PrefKey.recordingAspect.rawValue) }
     }
 

@@ -130,7 +130,7 @@ enum RecordingAspect: String, CaseIterable, Codable, Hashable, Sendable {
     /// explicitly so a future default change can't silently reshape a
     /// long-time user's recordings) and remains idempotent — it short-circuits
     /// the moment `recordingAspect` has any value.
-    static var `default`: RecordingAspect { .openGate }
+    static var `default`: RecordingAspect { .wide }
 
     /// Settings-row label. Orientation-agnostic (V3 §07) — the shape no
     /// longer names a direction.

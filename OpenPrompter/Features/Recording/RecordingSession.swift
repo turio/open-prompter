@@ -332,6 +332,43 @@ final class RecordingSession {
     /// Mic permission is requested here on first call. Photos permission
     /// is requested at save-time, not now — keeps the prompt close to the
     /// surface that needs it.
+    private(set) var capturePreflight: CapturePreflightSnapshot?
+
+    private func validateCapturePreflight() async throws {
+        guard !suppressDeviceWork else { return }
+        guard let device = cameraStore?.currentVideoDevice,
+              let queue = cameraSessionQueue else {
+            throw RecordingSessionError.sessionNotReady
+        }
+        let fps = RecordingFramerate(rawValue: Prefs.recordingFramerate) ?? .default
+        let aspect = (RecordingAspect(rawValue: Prefs.recordingAspect) ?? .default).canonicalShape
+        let capture: (Int, Int, Bool, Bool) = await withCheckedContinuation { continuation in
+            queue.async {
+                let dims = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
+                let supports = device.activeFormat.videoSupportedFrameRateRanges.contains {
+                    Double(fps.fps) >= $0.minFrameRate && Double(fps.fps) <= $0.maxFrameRate
+                }
+                let locked = abs(CMTimeGetSeconds(device.activeVideoMinFrameDuration) - 1 / Double(fps.fps)) < 0.0001
+                    && abs(CMTimeGetSeconds(device.activeVideoMaxFrameDuration) - 1 / Double(fps.fps)) < 0.0001
+                continuation.resume(returning: (Int(dims.width), Int(dims.height), supports, locked))
+            }
+        }
+        if aspect == .wide && (!PersonalCaptureContract.is4K(width: capture.0, height: capture.1) || !capture.2 || !capture.3) {
+            throw RecordingSessionError.writerSetupFailed(PersonalCaptureContract.unavailableMessage(fps: fps.fps))
+        }
+        let route = AVAudioSession.sharedInstance().currentRoute.inputs.first
+        let snapshot = CapturePreflightSnapshot(
+            cameraName: device.localizedName, cameraID: device.uniqueID,
+            rawWidth: capture.0, rawHeight: capture.1, fps: fps.fps,
+            aspect: aspect.rawValue, orientation: OrientationPolicy.currentPhysicalHold().rawValue,
+            preferredMic: Prefs.recordingMicSource ?? "builtin", actualMic: route?.portName ?? "No active input",
+            actualMicID: route?.uid ?? "", actualMicType: route?.portType.rawValue ?? "")
+        capturePreflight = snapshot
+        #if DEBUG
+        print("[CapturePreflight] \(snapshot.debugDescription)")
+        #endif
+    }
+
     func tapREC() async {
         // Check we can record (camera owner is happy + mic granted).
         guard cameraSession != nil || suppressDeviceWork else {
@@ -343,6 +380,9 @@ final class RecordingSession {
             state.surfaceError(RecordingSessionError.microphoneDenied.localizedDescription ?? "")
             return
         }
+
+        do { try await validateCapturePreflight() }
+        catch { state.surfaceError(error.localizedDescription); return }
 
         // Lock save destinations now — the user may flip Settings mid-take
         // and we want the original choice to win. Lock the rotation delta in
@@ -530,6 +570,8 @@ final class RecordingSession {
             hasPreviewLayer: rotationBoxAtStart?.hasPreviewLayer ?? false
         )
         #endif
+        do { try await validateCapturePreflight() }
+        catch { state.surfaceError(error.localizedDescription); return }
         writerStateLock.withLock { $0.recordingStartedAt = started }
         state.phase = .recording(startedAt: started)
         startLiveActivityIfNeeded(phase: .recording(startedAt: started))
@@ -834,6 +876,26 @@ final class RecordingSession {
             bufferShape: bufferShape,
             mirrored: Prefs.recordingMirrorVideo
         )
+
+        if OrientationPolicy.current.canonicalShape == .wide {
+            let portrait = abs(captureDelta.truncatingRemainder(dividingBy: 180)) < 45
+            guard PersonalCaptureContract.validWidePresentation(
+                width: writerWidth, height: writerHeight,
+                transform: videoInput.transform, portrait: portrait
+            ) else {
+                writer.cancelWriting()
+                Task { @MainActor [weak self] in
+                    self?.state.surfaceError(PersonalCaptureContract.unavailableMessage(fps: framerate.fps))
+                    await self?.endLiveActivityIfAny()
+                    self?.releaseAudioSession(role: .recording)
+                }
+                return nil
+            }
+        }
+        #if DEBUG
+        let presentation = CGRect(x: 0, y: 0, width: writerWidth, height: writerHeight).applying(videoInput.transform)
+        print("[CapturePreflight] firstFrame=\(writerWidth)x\(writerHeight) presentation=\(abs(presentation.width))x\(abs(presentation.height)) codec=HEVC Rec.709 SDR bitrate=\(bitrate)")
+        #endif
 
         // Audio input — AAC, voiceover bitrate.
         let audioSettings: [String: Any] = [

@@ -56,7 +56,7 @@ struct RecordingSettingsView: View {
                     .foregroundStyle(Theme.dim)
 
                 Picker("framerate", selection: $framerateRaw) {
-                    ForEach(RecordingFramerate.allCases, id: \.rawValue) { f in
+                    ForEach(RecordingFramerate.surfacedCases, id: \.rawValue) { f in
                         Text(f.displayName).tag(f.rawValue)
                     }
                 }
