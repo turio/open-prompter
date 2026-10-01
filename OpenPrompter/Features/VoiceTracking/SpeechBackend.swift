@@ -80,6 +80,9 @@ protocol SpeechBackend: AnyObject {
 
     /// Tear down recognition + release the audio session claim. Idempotent.
     func stop()
+
+    /// Fed by the shared AVCaptureAudioDataOutput queue, never a mic tap.
+    nonisolated func appendAudioSampleBuffer(_ sampleBuffer: CMSampleBuffer)
 }
 
 // MARK: - SFSpeechBackend
@@ -97,9 +100,9 @@ final class SFSpeechBackend: SpeechBackend {
     /// Apple's `SFSpeechAudioBufferRecognitionRequest` is documented
     /// thread-safe for `append(_:)`. Held nonisolated so the tap queue
     /// can call it without a main-actor hop.
-    private nonisolated(unsafe) var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private nonisolated let requestLock = OSAllocatedUnfairLock<SFSpeechAudioBufferRecognitionRequest?>(initialState: nil)
     private var recognitionTask: SFSpeechRecognitionTask?
-    private var audioEngine: AVAudioEngine?
+    private var generation = UUID()
 
     init() {}
 
@@ -113,6 +116,9 @@ final class SFSpeechBackend: SpeechBackend {
         onUnavailable: @escaping @MainActor () -> Void,
         onError: @escaping @MainActor (String) -> Void
     ) -> Bool {
+        if recognitionTask != nil { return true }
+        let sessionGeneration = UUID()
+        generation = sessionGeneration
         // SFSpeechBackend never calls onUnavailable — its availability is
         // knowable synchronously (the guard below), so it either starts or
         // returns false. `onUnavailable` is the analyzer backend's seam.
@@ -142,9 +148,9 @@ final class SFSpeechBackend: SpeechBackend {
         if !contextualStrings.isEmpty {
             request.contextualStrings = contextualStrings
         }
-        self.recognitionRequest = request
+        requestLock.withLock { $0 = request }
 
-        let task = recognizer.recognitionTask(with: request) { result, error in
+        let task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             // Callback runs on a background queue. Snapshot Sendable values
             // out of `result`, then hop to main.
             let resultSnapshot: (segments: [String], formatted: String, isFinal: Bool)?
@@ -168,6 +174,7 @@ final class SFSpeechBackend: SpeechBackend {
             }
 
             Task { @MainActor in
+                guard let self, self.generation == sessionGeneration else { return }
                 if let snap = resultSnapshot {
                     onTranscription(snap.formatted)
                     onWords(snap.segments)
@@ -182,57 +189,25 @@ final class SFSpeechBackend: SpeechBackend {
         }
         self.recognitionTask = task
 
-        // Stand up our own AVAudioEngine input tap so voice tracking
-        // captures the mic directly (2.0.4 architecture). Claim the shared
-        // audio session through the coordinator first.
-        if !startAudioEngineTap(request: request) {
-            voiceLog.error("SF: audio engine tap refused to start")
-            stop()
-            return false
-        }
+        #if DEBUG
+        voiceLog.info("SF armed; audio source=AVCaptureAudioDataOutput shared fork")
+        #endif
         return true
     }
 
-    /// Build + start an AVAudioEngine input tap that pumps PCM buffers into
-    /// `request`. Returns false if the engine refused to start. Extracted
-    /// verbatim from VoiceTracker.startAudioEngineTap — same ordering
-    /// (claim the session BEFORE reading the input format), same tap size.
-    private func startAudioEngineTap(
-        request: SFSpeechAudioBufferRecognitionRequest
-    ) -> Bool {
-        // Claim the shared audio session through the coordinator (fix 1a)
-        // instead of racing `setCategory` directly. Best-effort — the engine
-        // may still start on the system route, and `engine.start()` throws
-        // if not.
-        _ = AudioSessionCoordinator.shared.claim(.voiceTracking, configuration: .capture)
-        let engine = AVAudioEngine()
-        let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        guard format.sampleRate > 0 else { return false }
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak request] buffer, _ in
-            request?.append(buffer)
-        }
-        do {
-            try engine.start()
-        } catch {
-            inputNode.removeTap(onBus: 0)
-            return false
-        }
-        self.audioEngine = engine
-        return true
+    nonisolated func appendAudioSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
+        requestLock.withLock { $0?.appendAudioSampleBuffer(sampleBuffer) }
     }
 
     func stop() {
-        recognitionRequest?.endAudio()
+        generation = UUID()
+        requestLock.withLock { request in
+            request?.endAudio()
+            request = nil
+        }
         recognitionTask?.cancel()
-        recognitionRequest = nil
         recognitionTask = nil
         recognizer = nil
-        if let engine = audioEngine {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-            audioEngine = nil
-        }
         AudioSessionCoordinator.shared.release(.voiceTracking)
     }
 }

@@ -137,7 +137,9 @@ final class VoiceTracker {
 
     // MARK: - Internals
 
+    private(set) var activationID = UUID()
     private let suppressDeviceWork: Bool
+    private let backendFactory: (() -> SpeechBackend)?
     private var aligner: ScriptAligner?
     private var cursor: Int = 0
 
@@ -181,35 +183,34 @@ final class VoiceTracker {
     /// `SpeechAnalyzerBackend` (iOS 26+, Labs-gated). Owns the recognizer /
     /// request / task / mic engine for its engine. `nil` when not tracking
     /// or in test-suppress mode. (V3 Design 05 §4.2.)
-    private var speechBackend: SpeechBackend?
+    private var speechBackend: SpeechBackend? {
+        didSet {
+            let backend = speechBackend
+            audioSink.withLock { $0.backend = backend }
+        }
+    }
+    private struct AudioSinkState {
+        var backend: SpeechBackend?
+        var lastMeterPost: TimeInterval = 0
+        var packets: UInt64 = 0
+    }
+    @ObservationIgnored
+    private nonisolated let audioSink = OSAllocatedUnfairLock(initialState: AudioSinkState())
+
+    nonisolated var audioPacketCount: UInt64 { audioSink.withLock { $0.packets } }
 
     /// 2.0.4 / DEBUG replay: the recognizer + request + task for the
     /// DEBUG-only `startWithSampleAudio` URL-replay path, which drives
     /// `SFSpeechURLRecognitionRequest` directly rather than through a
     /// `SpeechBackend`. The live-mic path uses `speechBackend` instead.
     private var recognizer: SFSpeechRecognizer?
-    /// Apple's `SFSpeechAudioBufferRecognitionRequest` is documented
-    /// thread-safe for `appendAudioSampleBuffer`. Held nonisolated so
-    /// the camera audio queue can call it without a main-actor hop.
-    /// Used ONLY by the legacy `feedAudio(_:)` camera-fork path (dormant
-    /// now that the live path is engine-driven) — remains nil on the
-    /// backend-driven live path.
-    private nonisolated(unsafe) var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-
-    /// DEBUG replay engine placeholder — the URL replay path feeds itself
-    /// from the file, so no live mic engine is needed there. Retained for
-    /// teardown symmetry.
-    private var audioEngine: AVAudioEngine?
-
-    /// Throttle gate for audio-level publishing — only post one update
-    /// every ~50ms to avoid drowning the MainActor in hops at 50 buf/s.
-    private nonisolated(unsafe) var lastAudioLevelPostTime: TimeInterval = 0
 
     // MARK: - Init
 
-    init(suppressDeviceWork: Bool = false) {
+    init(suppressDeviceWork: Bool = false, backendFactory: (() -> SpeechBackend)? = nil) {
         self.suppressDeviceWork = suppressDeviceWork
+        self.backendFactory = backendFactory
         if suppressDeviceWork {
             self.authorization = .notDetermined
         } else {
@@ -350,35 +351,22 @@ final class VoiceTracker {
         guard authorization == .authorized else { return false }
         guard aligner != nil else { return false }
         guard !isActive else { return true }
+        activationID = UUID()
 
-        if suppressDeviceWork {
+        if suppressDeviceWork && backendFactory == nil {
             isActive = true
             return true
         }
 
-        // Real path. Choose the recognition backend (V3 Design 05 §4.2).
-        // The word stream flows through the SAME handleRecognizerResult
-        // sink regardless of backend, so the aligner + momentum controller
-        // are untouched — only the PRODUCER of the word stream is swapped.
-        //
-        // Backend choice is the ONE version branch in the whole feature:
-        // iOS 26 SpeechAnalyzer when available AND the Labs pref is on;
-        // otherwise the shipped SFSpeechRecognizer path.
-        if #available(iOS 26, *), Prefs.voiceUseSpeechAnalyzer {
-            let analyzer = SpeechAnalyzerBackend()
-            // The analyzer's availability is only knowable asynchronously
-            // (§6.2), so a synchronous `true` means "committed to trying".
-            // If it discovers it can't run it fires `onUnavailable`, which
-            // routes to `fallBackToSFBackend()` — the iOS 26 path can never
-            // make tracking worse than today.
-            if startBackend(analyzer, contextualStrings: biasVocabulary) {
-                self.speechBackend = analyzer
-                isActive = true
-                lastFailureReason = nil
-                return true
-            }
-            // Synchronous refusal (SpeechTranscriber.isAvailable == false).
-            // Fall through to SF immediately.
+        // The personal fork always uses the shared-buffer-fed SF backend.
+        // Analyzer remains unavailable until it supports this same input.
+        if let backendFactory {
+            let backend = backendFactory()
+            guard startBackend(backend, contextualStrings: biasVocabulary) else { return false }
+            speechBackend = backend
+            isActive = true
+            lastFailureReason = nil
+            return true
         }
 
         // GitHub #10 pre-flight — a WEAK gate, deliberately kept small.
@@ -521,6 +509,11 @@ final class VoiceTracker {
         voiceLogTracker.error("voice deactivated: \(reason, privacy: .public)")
     }
 
+    func failSharedAudio(_ reason: String) {
+        stop()
+        lastFailureReason = reason
+    }
+
     /// Why voice tracking last refused to run, or nil if it has not failed
     /// this session. Set on a hard backend failure and cleared on a
     /// successful `start()`. Drives the user-facing message (GitHub #10).
@@ -600,7 +593,7 @@ final class VoiceTracker {
         // No live request — the URL request feeds itself. Set the
         // pointer to nil so feedAudio remains a no-op (samples come
         // from the file, not the camera audio queue).
-        self.recognitionRequest = nil
+
 
         isActive = true
         return true
@@ -609,7 +602,8 @@ final class VoiceTracker {
 
     /// Stop tracking. Idempotent.
     func stop() {
-        if suppressDeviceWork {
+        activationID = UUID()
+        if suppressDeviceWork && backendFactory == nil {
             isActive = false
             audioLevel = 0
             return
@@ -624,27 +618,16 @@ final class VoiceTracker {
         // recognizer / request / task / mic engine AND releases the audio-
         // session claim (fix 1a) in its own `stop()`.
         if let backend = speechBackend {
-            backend.stop()
             speechBackend = nil
+            backend.stop()
         }
 
         // DEBUG replay path (SFSpeechURLRecognitionRequest): the request +
         // task live directly on VoiceTracker, not behind a backend. Tear
         // them down here.
-        recognitionRequest?.endAudio()
         recognitionTask?.cancel()
-        recognitionRequest = nil
         recognitionTask = nil
         recognizer = nil
-        // 2.0.4: stop the audio-engine tap that voice tracking owns.
-        // The mic privacy LED in the dynamic island goes off the
-        // moment the engine stops — that's the signal the user is
-        // looking for ("not currently using your mic").
-        if let engine = audioEngine {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-            audioEngine = nil
-        }
         // Release our audio-session claim (fix 1a) for the DEBUG replay path
         // (the backend already released for the live path; release() is
         // idempotent per role). If recording still holds `.recording` the
@@ -663,20 +646,22 @@ final class VoiceTracker {
     /// Also computes RMS amplitude and (throttled) publishes it as
     /// `audioLevel` for the on-screen meter.
     nonisolated func feedAudio(_ sampleBuffer: CMSampleBuffer) {
-        // Read the request pointer best-effort. start() / stop() always
-        // happen on @MainActor so the pointer is stable across a single
-        // delivery.
-        guard let request = recognitionRequest else { return }
-        request.appendAudioSampleBuffer(sampleBuffer)
-
-        // Audio level → throttled publish. ~20 Hz update rate is plenty
-        // for a visual meter and keeps MainActor hops light.
-        let now = CACurrentMediaTime()
-        if now - lastAudioLevelPostTime >= 0.05 {
-            lastAudioLevelPostTime = now
+        // Keep forwarding and stop serialized: after stop clears the sink,
+        // no packet can reach the old backend. The meter shares this stream.
+        let postMeter = audioSink.withLock { state -> Bool in
+            guard let backend = state.backend else { return false }
+            backend.appendAudioSampleBuffer(sampleBuffer)
+            state.packets &+= 1
+            let now = CACurrentMediaTime()
+            guard now - state.lastMeterPost >= 0.05 else { return false }
+            state.lastMeterPost = now
+            return true
+        }
+        if postMeter {
             let level = Self.computeAudioLevel(sampleBuffer)
             Task { @MainActor [weak self] in
-                self?.audioLevel = level
+                guard let self, self.isActive else { return }
+                self.audioLevel = level
             }
         }
     }

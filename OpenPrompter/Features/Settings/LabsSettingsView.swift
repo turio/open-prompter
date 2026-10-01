@@ -307,7 +307,8 @@ struct LabsSettingsView: View {
     private var speechAnalyzerEngineRow: some View {
         if #available(iOS 26, *) {
             Toggle("use iOS 26 speech engine (beta)", isOn: $voiceUseSpeechAnalyzer)
-            Text("in-progress: routes voice tracking through the iOS 26 SpeechAnalyzer engine, which biases toward the script's distinctive names + jargon for tighter matches. falls back to the classic engine automatically when the on-device model isn't installed yet.")
+                .disabled(true)
+            Text("disabled in this fork until the analyzer supports shared camera audio. voice-follow uses on-device SFSpeech with the recording microphone.")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.dim)
         }

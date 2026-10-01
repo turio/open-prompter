@@ -1688,26 +1688,32 @@ struct TeleprompterView: View {
             bodyTopPad: topPad,
             bodyHeight: bodyHeight
         )
-        // Flip `isActive` SYNCHRONOUSLY (start() sets it) before this tap
-        // returns. Previously start() ran inside the Task below, AFTER an
-        // `await` — leaving a window where the prompter-tap and play-button
-        // conflict checks saw `isActive == false` and toggled play instead
-        // (the "voice activation turns the play button green, and disabling
-        // voice starts playback" dogfood report). Voice owns its own
-        // AVAudioEngine tap, so start() does not depend on the recorder's
-        // shared-mic bring-up below.
+        // Arm synchronously so play/voice conflict checks see the active
+        // consumer immediately. Acquisition belongs solely to capture.
         guard tracker.start() else {
-            // GitHub #10: prefer the specific reason the tracker recorded.
-            // The old blanket message was indistinguishable from a transient
-            // hiccup, so users retried forever against a permanent condition.
             appState.userFacingError = tracker.lastFailureReason
                 ?? "Couldn't start voice tracking. Try again in a moment."
             return
         }
-        // Bring up the recorder's shared mic path for a SIMULTANEOUS
-        // recording flow (a no-op when the camera is off). Fire-and-forget —
-        // not on the critical path for voice's own tap.
-        Task { await session.ensureAudioCaptureRunning() }
+        let activation = tracker.activationID
+        let initialPackets = tracker.audioPacketCount
+        Task { @MainActor in
+            if appState.cameraStore.style == .off {
+                await appState.cameraStore.setStyle(.behind)
+            } else {
+                await appState.cameraStore.resume()
+            }
+            guard tracker.isActive, tracker.activationID == activation else { return }
+            guard await session.ensureAudioCaptureRunning(role: .voiceTracking) else {
+                tracker.failSharedAudio("Voice-follow couldn't start the shared camera microphone. Enable camera and microphone access, then reconnect or choose your microphone.")
+                return
+            }
+            try? await Task.sleep(for: .seconds(3))
+            guard tracker.isActive, tracker.activationID == activation,
+                  tracker.audioPacketCount == initialPackets else { return }
+            tracker.failSharedAudio("Voice-follow isn't receiving camera audio. Reconnect your microphone or turn the camera off and on, then try again.")
+        }
+
     }
 
     /// Translate a cursor advance into a target scroll offset.

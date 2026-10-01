@@ -319,12 +319,7 @@ enum PrefKey: String, CaseIterable {
         // SpeechAnalyzer voice biasing (V3 item B). DEBUG-on / Release-off
         // until it graduates from Labs — the analyzer path needs real iOS 26
         // hardware dogfooding before it ships enabled.
-        case .voiceUseSpeechAnalyzer:
-            #if DEBUG
-            return true
-            #else
-            return false
-            #endif
+        case .voiceUseSpeechAnalyzer: return false
         case .voiceFollowSpeedFactor: return 6.0
         case .coachMarkFormatShown: return false
         case .reviewRecordingsCompleted: return 0

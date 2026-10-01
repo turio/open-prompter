@@ -63,6 +63,10 @@ final class SpeechAnalyzerBackend: SpeechBackend {
     /// bring-up are swallowed rather than delivered after stop().
     private var stopped = false
 
+    // Disabled until the analyzer accepts the shared capture buffers.
+    static let sharedCaptureInputSupported = false
+    nonisolated func appendAudioSampleBuffer(_ sampleBuffer: CMSampleBuffer) {}
+
     init() {}
 
     @discardableResult
@@ -78,7 +82,7 @@ final class SpeechAnalyzerBackend: SpeechBackend {
         // Cheapest synchronous gate. If the framework says the transcriber
         // is unavailable on this device, don't even claim the mic — let
         // VoiceTracker use SF immediately (return false).
-        guard SpeechTranscriber.isAvailable else {
+        guard Self.sharedCaptureInputSupported, SpeechTranscriber.isAvailable else {
             return false
         }
 

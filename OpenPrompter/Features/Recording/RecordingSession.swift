@@ -491,11 +491,12 @@ final class RecordingSession {
     /// `audioFork != nil` AND `voiceTracker.isActive` for voice
     /// tracking). When neither consumer wants buffers, the router
     /// just discards them with an early return.
-    func ensureAudioCaptureRunning(role: AudioSessionRole = .voiceTracking) async {
-        guard !suppressDeviceWork else { return }
+    @discardableResult
+    func ensureAudioCaptureRunning(role: AudioSessionRole = .voiceTracking) async -> Bool {
+        guard !suppressDeviceWork else { return true }
         guard let cameraSessionQueue = cameraSessionQueue,
               let audioOut = cameraStore?.preAttachedAudioOutput else {
-            return
+            return false
         }
         // The audio session needs to be active for the AVCapture audio
         // path to actually deliver buffers. Re-running this is cheap
@@ -503,7 +504,11 @@ final class RecordingSession {
         // `role` reflects the actual consumer so the coordinator releases
         // the right claim later (default `.voiceTracking` — the standalone
         // voice-start path; the recording path passes `.recording`).
-        configureAudioSession(role: role)
+        guard cameraStore?.isSessionRunning == true,
+              cameraStore?.currentAudioInputDevice != nil else { return false }
+        if AudioSessionCoordinator.shared.claim(role, configuration: .capture) != nil { return false }
+        do { try PreferredAudioInput.applyPreference() }
+        catch { AudioSessionCoordinator.shared.release(role); return false }
         // 2.0.2: removed the `guard persistentAudioRouter == nil`
         // early-return that gated this whole function. If the camera
         // session ever reconfigured between voice activations (style
@@ -526,6 +531,7 @@ final class RecordingSession {
             }
         }
         self.persistentAudioRouter = router
+        return true
     }
 
     // MARK: - Countdown
