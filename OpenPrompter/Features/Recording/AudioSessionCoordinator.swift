@@ -190,12 +190,11 @@ final class AudioSessionCoordinator {
             return nil
         }
 
-        // Even when the winning configuration is unchanged, a caller may be
-        // re-claiming after an interruption where iOS silently deactivated us;
-        // re-activating is cheap and idempotent. But only fire the re-arm
-        // signal when the applied configuration actually changed, so we don't
-        // spam observers on every idempotent recording re-activation.
+        // Capture consumers share one configuration. REC must not activate
+        // a new route underneath rehearsal speech. Interruption/route/reset
+        // notifications explicitly clear the marker before re-applying.
         let changed = appliedConfiguration != config
+        guard changed else { return nil }
 
         let error = apply(config)
         if error == nil {

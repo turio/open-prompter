@@ -216,6 +216,9 @@ final class RecordingSession {
         /// The .mov destination URL the lazy writer construction will use.
         /// Set in `configureWriter`, cleared after the writer is built.
         var pendingWriterURL: URL?
+        #if DEBUG
+        var logNextAudioFormat = true
+        #endif
         /// Count of video sample buffers received since recording started.
         /// We DROP the first `RecordingSession.warmupVideoFrames` buffers
         /// because the iOS 26 hardware encoder + sensor emit half-rendered
@@ -336,13 +339,14 @@ final class RecordingSession {
 
     private func validateCapturePreflight() async throws {
         guard !suppressDeviceWork else { return }
+        await cameraStore?.refreshCapturePreferencesIfNeeded()
         guard let device = cameraStore?.currentVideoDevice,
               let queue = cameraSessionQueue else {
             throw RecordingSessionError.sessionNotReady
         }
         let fps = RecordingFramerate(rawValue: Prefs.recordingFramerate) ?? .default
         let aspect = (RecordingAspect(rawValue: Prefs.recordingAspect) ?? .default).canonicalShape
-        let capture: (Int, Int, Bool, Bool) = await withCheckedContinuation { continuation in
+        let capture: (Int, Int, Bool, Bool, Bool) = await withCheckedContinuation { continuation in
             queue.async {
                 let dims = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
                 let supports = device.activeFormat.videoSupportedFrameRateRanges.contains {
@@ -350,13 +354,19 @@ final class RecordingSession {
                 }
                 let locked = abs(CMTimeGetSeconds(device.activeVideoMinFrameDuration) - 1 / Double(fps.fps)) < 0.0001
                     && abs(CMTimeGetSeconds(device.activeVideoMaxFrameDuration) - 1 / Double(fps.fps)) < 0.0001
-                continuation.resume(returning: (Int(dims.width), Int(dims.height), supports, locked))
+                continuation.resume(returning: (Int(dims.width), Int(dims.height), supports, locked, !device.isVideoHDREnabled && device.activeColorSpace == .sRGB))
             }
+        }
+        guard capture.4 else {
+            throw RecordingSessionError.writerSetupFailed("SDR capture isn't ready. Turn the camera off and on before recording.")
         }
         if aspect == .wide && (!PersonalCaptureContract.is4K(width: capture.0, height: capture.1) || !capture.2 || !capture.3) {
             throw RecordingSessionError.writerSetupFailed(PersonalCaptureContract.unavailableMessage(fps: fps.fps))
         }
-        if let error = AudioSessionCoordinator.shared.claim(.recording, configuration: .capture) { throw error }
+        if let error = AudioSessionCoordinator.shared.claim(.recording, configuration: .capture) {
+            AudioSessionCoordinator.shared.release(.recording)
+            throw error
+        }
         do {
             try PreferredAudioInput.applyPreference()
             try PreferredAudioInput.validateActiveRoute(captureDevice: cameraStore?.currentAudioInputDevice?.device)
@@ -369,7 +379,7 @@ final class RecordingSession {
             cameraName: device.localizedName, cameraID: device.uniqueID,
             rawWidth: capture.0, rawHeight: capture.1, fps: fps.fps,
             aspect: aspect.rawValue, orientation: OrientationPolicy.currentPhysicalHold().rawValue,
-            preferredMic: Prefs.recordingMicSource ?? "builtin", actualMic: route?.portName ?? "No active input",
+            preferredMic: "\(PreferredAudioInput.savedName ?? "Microphone") [\(Prefs.recordingMicSource ?? "builtin")]", actualMic: route?.portName ?? "No active input",
             actualMicID: route?.uid ?? "", actualMicType: route?.portType.rawValue ?? "")
         capturePreflight = snapshot
         #if DEBUG
@@ -390,7 +400,11 @@ final class RecordingSession {
         }
 
         do { try await validateCapturePreflight() }
-        catch { state.surfaceError(error.localizedDescription); return }
+        catch {
+            releaseAudioSession(role: .recording)
+            state.surfaceError(error.localizedDescription)
+            return
+        }
 
         // Lock save destinations now — the user may flip Settings mid-take
         // and we want the original choice to win. Lock the rotation delta in
@@ -586,7 +600,11 @@ final class RecordingSession {
         )
         #endif
         do { try await validateCapturePreflight() }
-        catch { state.surfaceError(error.localizedDescription); return }
+        catch {
+            releaseAudioSession(role: .recording)
+            state.surfaceError(error.localizedDescription)
+            return
+        }
         writerStateLock.withLock { $0.recordingStartedAt = started }
         state.phase = .recording(startedAt: started)
         startLiveActivityIfNeeded(phase: .recording(startedAt: started))
@@ -606,6 +624,7 @@ final class RecordingSession {
             try await configureWriter(at: url, cameraSession: cameraSession, cameraSessionQueue: cameraSessionQueue)
         } catch {
             state.surfaceError(error.localizedDescription)
+            releaseAudioSession(role: .recording)
             await endLiveActivityIfAny()
         }
     }
@@ -657,6 +676,9 @@ final class RecordingSession {
             state.outputWidth = 0
             state.outputHeight = 0
             state.pendingWriterURL = url
+            #if DEBUG
+            state.logNextAudioFormat = true
+            #endif
         }
 
         // Capture the lock + recordingQueue into locals so the
@@ -707,7 +729,9 @@ final class RecordingSession {
         // session's lifetime instead of toggling per-take. Pass `.recording`
         // so this call reinforces the recording claim rather than leaving a
         // stray `.voiceTracking` claim behind when voice isn't active.
-        await ensureAudioCaptureRunning(role: .recording)
+        guard await ensureAudioCaptureRunning(role: .recording) else {
+            throw RecordingSessionError.writerSetupFailed("The shared recording microphone isn't ready. Reconnect or choose your microphone.")
+        }
 
         // Video path: install per-take router. Cleared in `finalize`.
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
@@ -1296,6 +1320,19 @@ final class RecordingSession {
         // `.ambient` and re-arms a live volume-button observer (audit A5).
         releaseAudioSession(role: .recording)
     }
+
+    #if DEBUG
+    nonisolated fileprivate func logSharedAudioFormat(_ buffer: CMSampleBuffer) {
+        let shouldLog = writerStateLock.withLock { state -> Bool in
+            guard state.logNextAudioFormat else { return false }
+            state.logNextAudioFormat = false
+            return true
+        }
+        guard shouldLog, let format = CMSampleBufferGetFormatDescription(buffer),
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format) else { return }
+        print("[SharedAudio] source=AVCaptureAudioDataOutput sampleRate=\(asbd.pointee.mSampleRate) channels=\(asbd.pointee.mChannelsPerFrame)")
+    }
+    #endif
 
     /// Sample-buffer append. Called on `recordingQueue`. Must NOT touch
     /// any @MainActor-isolated state — the router routes back through
@@ -2047,6 +2084,9 @@ fileprivate final class SampleBufferRouter:
         // BEFORE the writer path so audio reaches the recognizer even
         // when no recording is in progress.
         if output is AVCaptureAudioDataOutput {
+            #if DEBUG
+            session.logSharedAudioFormat(sampleBuffer)
+            #endif
             session.audioFork?(sampleBuffer)
         }
         // The session's `appendSampleBuffer` is `nonisolated` — we can call

@@ -96,18 +96,18 @@ final class HotfixDefaultsTests: XCTestCase {
     /// 16:9, so off the iPhone 17 family it was a surprising first-record
     /// aspect. Open gate carries no `requiresIOS26` constraint — it is
     /// honored on every device and OS we ship to. Brittle on purpose.
-    func test_recordingAspect_registrationDefault_isOpenGate() {
+    func test_recordingAspect_registrationDefault_isWide() {
         XCTAssertEqual(
             PrefKey.recordingAspect.defaultValue as? String,
-            "openGate",
-            "Fresh installs must default to open gate (3.1). 16:9 is a crop on non-native sensors."
+            "ratio16x9",
+            "Fresh installs must default to the personal wide capture shape."
         )
     }
 
     /// A fresh registration with no persisted value must resolve to
-    /// `"openGate"` — this is the read path `CameraStore` / `OrientationPolicy`
+    /// `"ratio16x9"` — this is the read path `CameraStore` / `OrientationPolicy`
     /// take on first launch.
-    func test_recordingAspect_freshRegistration_resolvesToOpenGate() {
+    func test_recordingAspect_freshRegistration_resolvesToWide() {
         let suiteName = "HotfixDefaultsTests.recordingAspect.\(UUID().uuidString)"
         guard let store = UserDefaults(suiteName: suiteName) else {
             XCTFail("could not create isolated UserDefaults suite")
@@ -119,8 +119,8 @@ final class HotfixDefaultsTests: XCTestCase {
         ])
         XCTAssertEqual(
             store.string(forKey: PrefKey.recordingAspect.rawValue),
-            "openGate",
-            "A fresh registration with no persisted value must resolve the aspect to open gate."
+            "ratio16x9",
+            "A fresh registration with no persisted value must resolve the aspect to wide."
         )
     }
 

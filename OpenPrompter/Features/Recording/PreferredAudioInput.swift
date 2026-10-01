@@ -49,12 +49,15 @@ enum PreferredAudioInput {
     static func applyPreference() throws {
         let session = AVAudioSession.sharedInstance()
         let pin = Prefs.recordingMicSource ?? "builtin"
-        if pin == "auto" { try session.setPreferredInput(nil); return }
+        if pin == "auto" {
+            if session.preferredInput != nil { try session.setPreferredInput(nil) }
+            return
+        }
         guard let selected = selectedPort(pin: pin, ports: (session.availableInputs ?? []).map(identity)),
               let port = session.availableInputs?.first(where: { $0.uid == selected.id }) else {
             throw RecordingSessionError.writerSetupFailed(missingMessage(pin: pin))
         }
-        try session.setPreferredInput(port)
+        if session.preferredInput?.uid != port.uid { try session.setPreferredInput(port) }
     }
 
     @MainActor

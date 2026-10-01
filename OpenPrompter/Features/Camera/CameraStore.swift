@@ -132,6 +132,26 @@ final class CameraStore {
     /// captures audio samples to the writer) lives in RecordingSession;
     /// the input being attached when recording isn't active is harmless.
     nonisolated(unsafe) private var currentAudioInput: AVCaptureDeviceInput?
+    nonisolated(unsafe) private var configuredPreferences: String?
+
+    nonisolated private static var capturePreferenceFingerprint: String {
+        "\(Prefs.recordingFramerate)|\(Prefs.recordingAspect)|\(Prefs.recordingMicSource ?? "builtin")|\(AVAudioSession.sharedInstance().currentRoute.inputs.first?.uid ?? "")"
+    }
+
+    /// Refresh changed settings before a take. An unchanged configuration
+    /// takes no session bracket and does not interrupt rehearsal audio.
+    func refreshCapturePreferencesIfNeeded() async {
+        guard !suppressDeviceWork, style != .off else { return }
+        let wanted = Self.capturePreferenceFingerprint
+        let matches: Bool = await withCheckedContinuation { continuation in
+            sessionQueue.async {
+                continuation.resume(returning: self.configuredPreferences == wanted)
+            }
+        }
+        guard !matches else { return }
+        await suspend()
+        await resume()
+    }
 
     /// Read-only accessor exposed to RecordingSession so it knows whether
     /// to attach an audio input itself (legacy fallback) or rely on the
@@ -242,7 +262,7 @@ final class CameraStore {
         // (downgrade scenario), fall back to `.off` rather than crashing.
         let raw = Prefs.cameraStyle
         self.style = CameraStyle(rawValue: raw) ?? .off
-        self.authorization = AVCaptureDevice.authorizationStatus(for: .video)
+        self.authorization = suppressDeviceWork ? .notDetermined : AVCaptureDevice.authorizationStatus(for: .video)
         // Single registration point for the whole app. `OrientationPolicy`
         // holds it weakly, so the store stays the owner and a torn-down store
         // silently drops the app back to zero-delta (portrait) behaviour.
@@ -470,8 +490,8 @@ final class CameraStore {
         // it directly. Lets unit tests exercise the .pip → .behind happy
         // path without requiring an Info.plist NSCameraUsageDescription
         // in the test bundle.
-        if suppressDeviceWork && authorization == .authorized {
-            return true
+        if suppressDeviceWork {
+            return authorization == .authorized
         }
         let status = AVCaptureDevice.authorizationStatus(for: .video)
         switch status {
@@ -638,6 +658,7 @@ final class CameraStore {
     /// preset's default. The caller already holds open `beginConfiguration`,
     /// so we set the preset here while we're inside the bracket.
     nonisolated private func configureInputsLocked() {
+        configuredPreferences = Self.capturePreferenceFingerprint
         guard let device = Self.selectFrontCameraDevice() else {
             return
         }
@@ -657,6 +678,7 @@ final class CameraStore {
         // Set sessionPreset = .inputPriority BEFORE writing activeFormat.
         // Named presets (.high, .hd1920x1080, etc.) silently win over
         // explicit format assignments at commitConfiguration time.
+        session.automaticallyConfiguresApplicationAudioSession = false
         session.sessionPreset = .inputPriority
 
         // Resolve the user's fps target and aspect-shape choice, then run

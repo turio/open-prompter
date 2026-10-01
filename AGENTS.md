@@ -48,6 +48,10 @@ The CI uses the same build/test pattern with its available simulator. For focuse
 - Preserve stored enum raw strings and preference migrations. `fps24` and legacy vertical aspect remain decodable.
 - Keep `ScriptAligner` thresholds and existing visible-range/block/momentum semantics when modifying audio transport.
 - Shared AVAudioSession claims belong to `AudioSessionCoordinator`. Stopping speech must not stop recorded audio; stopping recording must not stop speech.
+- `PreferredAudioInput` resolves session ports separately from capture IDs: exact UID, then a unique exact active-route name bridge. A saved pin alone never establishes the current source. `AudioRouteMonitor` and `CaptureStatusModifier` show actual routing and retain take-change warnings.
+- `SFSpeechBackend` takes externally supplied sample buffers under a lock; live SF owns no `AVAudioEngine`. `SpeechAnalyzerBackend` stays compiled but disabled until shared-buffer ingestion is implemented, including when an old analyzer preference is persisted.
+- Fresh installs use `.wide`, High, 30 fps, with 30/60 surfaced. Existing explicit aspects and the historical open-gate migration are preserved. `PersonalCaptureContract` checks 4K eligibility and actual transformed first-frame presentation; unsupported takes fail closed.
+- Camera preference refresh occurs before a take only when capture preferences/current route changed. Do not add a session configuration bracket to an unchanged REC transition.
 - No analytics or additional network/services/dependencies without an explicit request. The formatter and recognizer operate on device.
 
 For capture changes start in `CameraStore`, `RecordingSession`, and their pure selector/orientation tests. For following behavior inspect `VoiceTracker`, `SpeechBackend`, `ScriptAligner` and `TeleprompterView`. Preference additions require `PrefKey`, defaults/migrations and KVS mirroring review. Remote input changes start at the source adapter and `RemoteBindingStore`.
@@ -55,3 +59,5 @@ For capture changes start in `CameraStore`, `RecordingSession`, and their pure s
 ## Implementation recovery
 
 The personal capture source plan is `docs/personal-4k-dji-implementation-plan.md`. Use AmnesiaGraph `amnesia resume` and follow its source pointers; use `ready`, `start`, and verified `done` transitions. Hardware acceptance results belong in implementation notes, not assertions inferred from simulator tests.
+
+If `amnesia` is unavailable, the upstream CLI installs with `go install github.com/turio/AmnesiaGraph/cmd/amnesia@latest`; ensure the Go bin directory is on PATH. This implementation used a temporary CLI at `/tmp/amnesia` without editing personal skills or configuration.

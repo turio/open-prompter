@@ -5,7 +5,7 @@
       "id": "T001",
       "order": 1,
       "title": "Baseline build and tests",
-      "source": "docs/personal-4k-dji-implementation-plan.md#1",
+      "source": "docs/personal-4k-dji-implementation-plan.md#1-fork-branch-build-and-establish-a-baseline",
       "depends_on": [],
       "verify": [
         "test -f docs/baseline.md"
@@ -15,7 +15,7 @@
       "id": "T002",
       "order": 2,
       "title": "4K SDR 30/60 contract",
-      "source": "docs/personal-4k-dji-implementation-plan.md#3",
+      "source": "docs/personal-4k-dji-implementation-plan.md#3-make-4k-sdr-30-fps--60-fps-the-personal-capture-contract",
       "depends_on": [
         "T001"
       ],
@@ -27,7 +27,7 @@
       "id": "T003",
       "order": 3,
       "title": "Preferred and actual audio routes",
-      "source": "docs/personal-4k-dji-implementation-plan.md#5",
+      "source": "docs/personal-4k-dji-implementation-plan.md#5-make-the-dji-mic-mini-the-explicit-preferred-recording-input",
       "depends_on": [
         "T002"
       ],
@@ -39,7 +39,7 @@
       "id": "T004",
       "order": 4,
       "title": "Shared capture audio speech backend",
-      "source": "docs/personal-4k-dji-implementation-plan.md#6",
+      "source": "docs/personal-4k-dji-implementation-plan.md#6-use-one-dji-audio-stream-for-both-recording-and-voice-follow",
       "depends_on": [
         "T003"
       ],
@@ -51,7 +51,7 @@
       "id": "T005",
       "order": 5,
       "title": "Camera behind text composition",
-      "source": "docs/personal-4k-dji-implementation-plan.md#9",
+      "source": "docs/personal-4k-dji-implementation-plan.md#9-restore-a-true-camera-behind-teleprompter-text-composition",
       "depends_on": [
         "T004"
       ],
@@ -63,7 +63,7 @@
       "id": "T006",
       "order": 6,
       "title": "Simulator validation and deployment",
-      "source": "docs/personal-4k-dji-implementation-plan.md#12",
+      "source": "docs/personal-4k-dji-implementation-plan.md#12-tests-to-add-or-update",
       "depends_on": [
         "T005"
       ],
@@ -75,7 +75,7 @@
       "id": "T007",
       "order": 7,
       "title": "Physical acceptance A\u2013G",
-      "source": "docs/personal-4k-dji-implementation-plan.md#13",
+      "source": "docs/personal-4k-dji-implementation-plan.md#13-physical-iphone-17-pro-max-acceptance-pass",
       "depends_on": [
         "T006"
       ],

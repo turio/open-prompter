@@ -59,13 +59,7 @@ struct LabsSettingsView: View {
     /// iOS 26 SpeechAnalyzer voice-tracking engine (V3 item B, Slice B).
     /// Surfaced only behind `#if DEBUG` + `if #available(iOS 26)` — a no-op on
     /// earlier OSes.
-    @AppStorage(PrefKey.voiceUseSpeechAnalyzer.rawValue) private var voiceUseSpeechAnalyzer: Bool = {
-        #if DEBUG
-        return true
-        #else
-        return false
-        #endif
-    }()
+    @AppStorage(PrefKey.voiceUseSpeechAnalyzer.rawValue) private var voiceUseSpeechAnalyzer: Bool = false
 
     #if DEBUG
     /// Self-test result alert state. Behind `#if DEBUG` so production builds

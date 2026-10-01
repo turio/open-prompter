@@ -114,7 +114,7 @@ enum RecordingAspect: String, CaseIterable, Codable, Hashable, Sendable {
     /// alias by construction. `availableAspects` in the settings view filters
     /// this by device support.
     static var surfacedCases: [RecordingAspect] {
-        [.openGate, .wide, .classic, .square]
+        [.wide, .openGate, .classic, .square]
     }
 
     /// Default for *new* users (3.1): the full-sensor readout. `.wide` used to
