@@ -31,6 +31,8 @@ Capture flow: `CameraStore` session â†’ pre-attached video/audio data outputs â†
 
 Use macOS with Xcode and XcodeGen (`README.md`, `project.yml`). Run `xcodegen generate` after adding/removing source files. `OpenPrompter.xcodeproj` and derived build output are generated/ignored; do not commit them. Preserve committed signing identifiers; simulator commands use `CODE_SIGNING_ALLOWED=NO`.
 
+The personal app display name is **AI Tele Prompter**, with bundle ID `com.turio.aiteleprompter`; the widget uses `.liveactivity` and the iCloud container uses `iCloud.com.turio.aiteleprompter`. These identities are declared in `project.yml`, which also generates the tracked Info.plist and entitlements files. The scheme/product remains `OpenPrompter`. Apply the owner's signing team locally in the ignored generated project or with an `xcodebuild` override; regenerating the project resets that local team selection.
+
 ```sh
 xcodegen generate
 xcodebuild build -scheme OpenPrompter -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max,OS=latest' CODE_SIGNING_ALLOWED=NO -skipPackagePluginValidation

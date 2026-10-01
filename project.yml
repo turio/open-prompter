@@ -63,8 +63,8 @@ targets:
     info:
       path: OpenPrompter/Resources/Info.plist
       properties:
-        CFBundleDisplayName: Open Prompter
-        CFBundleName: Open Prompter
+        CFBundleDisplayName: AI Tele Prompter
+        CFBundleName: AI Tele Prompter
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSRequiresIPhoneOS: true
@@ -133,15 +133,15 @@ targets:
       path: OpenPrompter/OpenPrompter.entitlements
       properties:
         com.apple.developer.icloud-container-identifiers:
-          - iCloud.app.openprompter.ios
+          - iCloud.com.turio.aiteleprompter
         com.apple.developer.icloud-services:
           - CloudDocuments
         com.apple.developer.ubiquity-container-identifiers:
-          - iCloud.app.openprompter.ios
-        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)app.openprompter.ios
+          - iCloud.com.turio.aiteleprompter
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)com.turio.aiteleprompter
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.openprompter.ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.turio.aiteleprompter
         # 1 = iPhone, 2 = iPad. iPad added in 3.2: an iPad on a teleprompter
         # mount is the classic studio rig, and it also unlocks running natively
         # on Apple Silicon Macs as a "Designed for iPad" app.
@@ -179,15 +179,15 @@ targets:
     info:
       path: OpenPrompterLiveActivity/Info.plist
       properties:
-        CFBundleDisplayName: Open Prompter
-        CFBundleName: Open Prompter
+        CFBundleDisplayName: AI Tele Prompter
+        CFBundleName: AI Tele Prompter
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.openprompter.ios.liveactivity
+        PRODUCT_BUNDLE_IDENTIFIER: com.turio.aiteleprompter.liveactivity
         # 1 = iPhone, 2 = iPad. iPad added in 3.2: an iPad on a teleprompter
         # mount is the classic studio rig, and it also unlocks running natively
         # on Apple Silicon Macs as a "Designed for iPad" app.
@@ -203,7 +203,7 @@ targets:
       - path: OpenPrompterTests
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.openprompter.ios.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.turio.aiteleprompter.tests
         # 1 = iPhone, 2 = iPad. iPad added in 3.2: an iPad on a teleprompter
         # mount is the classic studio rig, and it also unlocks running natively
         # on Apple Silicon Macs as a "Designed for iPad" app.
